@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Admin – EVANA CHIC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="index.html" class="logo">EVANA CHIC</a>
+    <nav class="nav"><a class="active" href="admin.html">Admin</a></nav>
+    <div class="actions"><a class="btn small" href="index.html">View site</a></div>
+  </header>
+
+  <main>
+    <h1 class="page-title gold-text">Admin</h1>
+    <div class="divider"></div>
+    <p class="page-sub" id="status">Loading…</p>
+
+    <div class="adm-bar">
+      <button class="btn solid small" id="export">Export to website</button>
+      <button class="btn small" id="reset">Reset to starter data</button>
+    </div>
+    <p class="adm-note">Changes are saved automatically in <b>this browser</b>. To show them to everyone, click <b>Export to website</b>, replace <code>store-data.js</code> in your site folder with the downloaded file, and publish again.</p>
+
+    <h2 class="adm-h gold-text">1 · Category sections</h2>
+    <div class="adm-add">
+      <input class="adm-in" id="new-cat" placeholder="New category name">
+      <button class="btn small" id="add-cat">Add category</button>
+    </div>
+    <div id="cats"></div>
+
+    <h2 class="adm-h gold-text">2 · Boxes (products)</h2>
+    <div class="adm-card" id="new-box">
+      <h3>Create a new box</h3>
+      <div class="adm-row">
+        <input class="adm-in" id="nb-name" placeholder="Name">
+        <input class="adm-in" id="nb-price" type="number" min="0" step="0.01" placeholder="Price">
+        <select class="adm-in" id="nb-cat"></select>
+        <label class="adm-check"><input type="checkbox" id="nb-new" checked> New collection</label>
+      </div>
+      <div class="adm-row">
+        <label class="adm-lbl">Options <input class="adm-in" id="nb-opts" value="1, 2, 3, 4, 5, 6, 7, 8, 9, 10" placeholder="1, 2, 3"></label>
+        <label class="adm-lbl">Sizes <input class="adm-in" id="nb-sizes" value="S, M, L, XL" placeholder="S, M, L"></label>
+      </div>
+      <p class="adm-note" style="margin:0 0 12px">Separate options and sizes with commas. Leave empty to hide that choice.</p>
+      <div class="adm-row">
+        <label class="btn small">Choose pictures<input type="file" id="nb-files" accept="image/*" multiple hidden></label>
+        <span id="nb-count" class="adm-note">No pictures chosen</span>
+        <button class="btn solid small" id="nb-create">Create box</button>
+      </div>
+    </div>
+    <div id="prods"></div>
+  </main>
+  <footer>© EVANA CHIC</footer>
+
+  <script src="products.js"></script>
+  <script src="store-data.js"></script>
+  <script src="store.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
