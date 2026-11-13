@@ -424,14 +424,24 @@
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName;
         document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
       };
-      download();                                   // the PDF is created and saved automatically
+      // Phones that can share files: the PDF goes into WhatsApp automatically (attached, nothing to pick from storage).
+      // Other devices: the PDF is saved and the WhatsApp chat opens with the order typed in.
+      const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
       const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(receipt(cart, subtotal, total, cust) + '\n\nOrder no: ' + orderNo + '\n(PDF receipt attached)')}`;
+      if (!canShare) download();
       const done = openModal(`
         <h3 class="gold-text">Receipt Ready ✓</h3>
-        <p>Your PDF receipt <b>${orderNo}</b> was saved on your device.</p>
-        <p>Tap the button below to open WhatsApp, then <b>attach the PDF</b> and press send.</p>
+        <p>${canShare
+          ? `Tap the button, choose <b>WhatsApp</b>, then choose <b>EVANA CHIC</b> (${WHISH_NUMBER}) and press send. Your PDF receipt is attached automatically.`
+          : `Your PDF receipt <b>${orderNo}</b> was saved on your device. Tap the button to open WhatsApp, then <b>attach the PDF</b> and press send.`}</p>
         <button class="btn solid" type="button" id="send-pdf">Send receipt on WhatsApp</button>`);
-      $('#send-pdf', done).onclick = () => { window.open(waUrl, '_blank'); };
+      $('#send-pdf', done).onclick = async () => {
+        if (canShare) {
+          try { await navigator.share({ files: [file], title: 'EVANA CHIC order ' + orderNo, text: receipt(cart, subtotal, total, cust) }); return; }
+          catch (e) { if (e && e.name === 'AbortError') return; download(); }
+        }
+        window.open(waUrl, '_blank');
+      };
     }
 
     function popup(total, onOk) {
