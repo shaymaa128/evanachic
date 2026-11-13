@@ -50,6 +50,12 @@
       </div>
       <p class="adm-note" style="margin:0 0 12px">Separate options and sizes with commas. Leave empty to hide that choice.</p>
       <div class="adm-row">
+        <label class="adm-lbl">Video link (YouTube) <input class="adm-in" id="nb-vlink" placeholder="https://youtu.be/xxxxxxxxxxx"></label>
+        <label class="btn small">Choose video file<input type="file" id="nb-vfile" accept="video/*" hidden></label>
+        <span id="nb-vcount" class="adm-note">No video file chosen</span>
+      </div>
+      <p class="adm-note" style="margin:0 0 12px">Video is optional. A YouTube link is best (fast, free). A video file should be short and small (under 25 MB).</p>
+      <div class="adm-row">
         <label class="btn small">Choose pictures<input type="file" id="nb-files" accept="image/*" multiple hidden></label>
         <span id="nb-count" class="adm-note">No pictures chosen</span>
         <button class="btn solid small" id="nb-create">Create box</button>

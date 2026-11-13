@@ -84,13 +84,18 @@
   /* ---------- Product box ---------- */
   function boxHTML(p) {
     const imgs = p.images.map((s, i) => `<img src="${s}" alt="${p.name} ${i + 1}" draggable="false" data-i="${i}" loading="lazy">`).join('');
-    const dots = p.images.length > 1 ? `<div class="dots">${p.images.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : '';
+    const vlist = p.videos || [];
+    const vids = vlist.map((v, k) => v.type === 'youtube'
+      ? `<div class="vslide" data-vk="${k}" style="background-image:url('https://img.youtube.com/vi/${encodeURIComponent(v.id)}/hqdefault.jpg')"><span class="play">▶</span></div>`
+      : `<div class="vslide" data-vk="${k}"><video src="${esc(v.src)}#t=0.1" preload="metadata" muted playsinline></video><span class="play">▶</span></div>`).join('');
+    const slides = p.images.length + vlist.length;
+    const dots = slides > 1 ? `<div class="dots">${Array.from({ length: slides }, (_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : '';
     const btns = (list, attr) => list.map(v => `<button type="button" class="opt" data-${attr}="${esc(v)}">${esc(v)}</button>`).join('');
     const optBlock = (p.options && p.options.length) ? `<div class="opt-label">Choose option</div><div class="opts" data-g="o">${btns(p.options, 'o')}</div>` : '';
     const sizeBlock = (p.sizes && p.sizes.length) ? `<div class="opt-label">Choose size</div><div class="opts" data-g="s">${btns(p.sizes, 's')}</div>` : '';
     return `<article class="box" data-id="${p.id}">
-      <div class="slider">${imgs}</div>${dots}
-      <div class="hint">Hold a photo to magnify · swipe for more</div>
+      <div class="slider">${imgs}${vids}</div>${dots}
+      <div class="hint">Hold a photo to magnify · swipe for more${vlist.length ? ' · tap ▶ to watch the video' : ''}</div>
       <h3>${p.name}</h3>
       <div class="price">${money(p.price)}</div>
       ${optBlock}${sizeBlock}
@@ -109,6 +114,8 @@
 
     grid.addEventListener('click', e => {
       const box = e.target.closest('.box'); if (!box) return;
+      const vs = e.target.closest('.vslide');
+      if (vs) { const p = byId(box.dataset.id); openVideo(p && (p.videos || [])[+vs.dataset.vk]); return; }
       const opt = e.target.closest('.opt');
       if (opt) {                                  // only ONE option and ONE size can be selected
         $$('.opt', opt.parentElement).forEach(o => o.classList.remove('selected'));
@@ -142,6 +149,22 @@
     grid.addEventListener('pointermove', e => { if (timer && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) cancel(); });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => grid.addEventListener(ev, cancel));
     grid.addEventListener('contextmenu', e => { if (e.target.closest('.slider img')) e.preventDefault(); });
+  }
+
+  /* ---------- Video player (opens when a ▶ slide is tapped) ---------- */
+  function openVideo(v) {
+    if (!v) return;
+    const m = document.createElement('div'); m.className = 'vmodal';
+    m.innerHTML = `<button class="icon-btn vm-close" type="button" aria-label="Close">✕</button><div class="vm-box">${
+      v.type === 'youtube'
+        ? `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
+        : `<video src="${esc(v.src)}" controls autoplay playsinline></video>`}</div>`;
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    const close = () => { m.remove(); document.removeEventListener('keydown', onKey); };
+    m.querySelector('.vm-close').onclick = close;
+    m.addEventListener('click', e => { if (e.target === m) close(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(m);
   }
 
   /* ---------- Magnifier / lightbox ---------- */

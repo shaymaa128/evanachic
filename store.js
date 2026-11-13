@@ -52,5 +52,6 @@ async function loadStore() {
     if (!p.images || !p.images.length) p.images = [ph(p.name, '')];
     if (!Array.isArray(p.options)) p.options = [...DEFAULT_OPTIONS];   // older saved data
     if (!Array.isArray(p.sizes)) p.sizes = [...DEFAULT_SIZES];
+    if (!Array.isArray(p.videos)) p.videos = [];                        // videos: {type:'youtube', id} or {type:'file', src}
   });
 }
