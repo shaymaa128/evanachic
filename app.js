@@ -220,14 +220,218 @@
     const detail = it => [it.option ? `Option: <b>${esc(it.option)}</b>` : '', it.size ? `Size: <b>${esc(it.size)}</b>` : ''].filter(Boolean);
     const plain = it => [it.option ? 'Option ' + it.option : '', it.size ? 'Size ' + it.size : ''].filter(Boolean).join(' - ');
 
-    function receipt(cart, subtotal, total) {
+    function receipt(cart, subtotal, total, cust) {
       const lines = cart.map((it, n) => {
         const p = byId(it.id), d = plain(it);
         return `${n + 1}. ${p.name}${d ? ' (' + d + ')' : ''}\n    ${it.qty} x ${money(p.price)} = ${money(p.price * it.qty)}`;
       });
-      return `*EVANA CHIC - Order Receipt*\nDate: ${new Date().toLocaleDateString('en-GB')}\n\n${lines.join('\n')}\n\n` +
+      const who = cust ? `Name: ${cust.name}\nPhone: ${cust.phone}\nAddress: ${cust.address}\n\n` : '';
+      return `*EVANA CHIC - Order Receipt*\nDate: ${new Date().toLocaleDateString('en-GB')}\n\n${who}${lines.join('\n')}\n\n` +
         `Subtotal: ${money(subtotal)}\nDelivery: ${money(DELIVERY_FEE)}\n*TOTAL: ${money(total)}*\n\n` +
         `Payment method: Whish\nI will send ${money(total)} on Whish to ${WHISH_NUMBER}.\nDelivery: 10-15 days.`;
+    }
+
+    /* ---------- Modal helper ---------- */
+    function openModal(html) {
+      const old = $('.modal'); if (old) old.remove();
+      const m = document.createElement('div'); m.className = 'modal';
+      m.innerHTML = `<div class="modal-box">${html}</div>`;
+      document.body.appendChild(m);
+      requestAnimationFrame(() => m.classList.add('open'));
+      return m;
+    }
+
+    /* ---------- Customer details form (name, address, phone) ---------- */
+    function detailsForm(onDone) {
+      const m = openModal(`
+        <h3 class="gold-text">Delivery Details</h3>
+        <form id="cust-form" novalidate>
+          <label class="field"><span>Full name</span><input id="c-name" type="text" autocomplete="name" placeholder="Your full name"></label>
+          <label class="field"><span>Address</span><textarea id="c-addr" rows="3" autocomplete="street-address" placeholder="City, street, building, floor"></textarea></label>
+          <label class="field"><span>Phone number</span><input id="c-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. 71 123 456"></label>
+          <button class="btn solid" type="submit">Continue</button>
+          <button class="back" type="button" id="cust-back">Back to cart</button>
+        </form>`);
+      $('#cust-back', m).onclick = () => m.remove();
+      $('#cust-form', m).onsubmit = e => {
+        e.preventDefault();
+        const name = $('#c-name', m).value.trim(), address = $('#c-addr', m).value.trim(), phone = $('#c-phone', m).value.trim();
+        if (name.length < 3) { toast('Please enter your full name'); $('#c-name', m).focus(); return; }
+        if (address.length < 6) { toast('Please enter your address'); $('#c-addr', m).focus(); return; }
+        if (phone.replace(/\D/g, '').length < 7) { toast('Please enter a valid phone number'); $('#c-phone', m).focus(); return; }
+        onDone({ name, address, phone });
+      };
+      setTimeout(() => $('#c-name', m).focus(), 50);
+    }
+
+    /* ---------- PDF receipt (drawn on canvas, so Arabic names/addresses work too) ---------- */
+    function loadImg(src) {
+      return new Promise(res => {
+        const im = new Image(); let done = false;
+        const fin = v => { if (!done) { done = true; res(v); } };
+        im.onload = () => fin(im); im.onerror = () => fin(null);
+        setTimeout(() => fin(null), 8000);
+        im.src = src;
+      });
+    }
+    function wrapText(ctx, text, maxW) {
+      const out = [];
+      String(text).split('\n').forEach(par => {
+        let line = '';
+        par.split(/\s+/).forEach(w => {
+          const t = line ? line + ' ' + w : w;
+          if (ctx.measureText(t).width <= maxW || !line) line = t; else { out.push(line); line = w; }
+        });
+        out.push(line);
+      });
+      return out;
+    }
+    function fitText(ctx, text, maxW) {
+      let t = String(text);
+      while (t.length > 1 && ctx.measureText(t).width > maxW) t = t.slice(0, -1);
+      return t.length < String(text).length ? t.trim() + '…' : t;
+    }
+    function drawCover(ctx, im, x, y, w, h) {
+      const r = Math.max(w / im.width, h / im.height), sw = w / r, sh = h / r;
+      ctx.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, x, y, w, h);
+    }
+    function makePdf(pages) {            // pages: [{w, h, bytes(JPEG)}] -> PDF Blob (A4)
+      const enc = new TextEncoder(), chunks = [], offs = []; let len = 0;
+      const push = d => { const u = typeof d === 'string' ? enc.encode(d) : d; chunks.push(u); len += u.length; };
+      const obj = (n, body) => { offs[n] = len; push(n + ' 0 obj\n' + body + '\nendobj\n'); };
+      const n = pages.length;
+      push('%PDF-1.4\n');
+      obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+      obj(2, '<< /Type /Pages /Kids [' + pages.map((_, i) => (3 + 3 * i) + ' 0 R').join(' ') + '] /Count ' + n + ' >>');
+      pages.forEach((p, i) => {
+        const pg = 3 + 3 * i, ct = 4 + 3 * i, im = 5 + 3 * i, content = `q 595 0 0 842 0 0 cm /Im${i} Do Q`;
+        obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im${i} ${im} 0 R >> >> /Contents ${ct} 0 R >>`);
+        obj(ct, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+        offs[im] = len;
+        push(`${im} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\nstream\n`);
+        push(p.bytes); push('\nendstream\nendobj\n');
+      });
+      const size = 3 + 3 * n, xref = len;
+      let x = `xref\n0 ${size}\n0000000000 65535 f \n`;
+      for (let k = 1; k < size; k++) x += String(offs[k]).padStart(10, '0') + ' 00000 n \n';
+      push(x + `trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+      return new Blob(chunks, { type: 'application/pdf' });
+    }
+
+    async function buildReceiptPdf(cart, subtotal, total, cust, orderNo) {
+      const W = 1240, H = 1754, M = 80, GOLD = '#b8912a', DARK = '#161616', GREY = '#666';
+      const SANS = '"Segoe UI", Roboto, Helvetica, Arial, sans-serif', SERIF = 'Georgia, "Times New Roman", serif';
+      const imgs = await Promise.all(cart.map(it => loadImg(byId(it.id).images[0])));
+      const pages = []; let ctx, y;
+      const newPage = first => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H; pages.push(c);
+        ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+        ctx.textBaseline = 'alphabetic';
+        if (first) {
+          ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, W, 230);
+          ctx.fillStyle = GOLD; ctx.textAlign = 'center';
+          ctx.font = `700 78px ${SERIF}`; ctx.fillText('EVANA CHIC', W / 2, 120);
+          ctx.fillStyle = '#f6e3a1'; ctx.font = `400 30px ${SANS}`; ctx.fillText('ORDER RECEIPT', W / 2, 175);
+          y = 290;
+        } else {
+          ctx.fillStyle = GOLD; ctx.textAlign = 'left'; ctx.font = `700 34px ${SERIF}`;
+          ctx.fillText('EVANA CHIC – Order ' + orderNo + ' (continued)', M, M + 20); y = M + 80;
+        }
+        ctx.textAlign = 'left';
+      };
+      const line = (x1, x2, yy, col = '#ddd', w = 2) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, yy); ctx.lineTo(x2, yy); ctx.stroke(); };
+      const kv = (k, v, maxW) => {
+        ctx.font = `600 28px ${SANS}`; ctx.fillStyle = GREY; ctx.fillText(k, M, y);
+        ctx.font = `400 30px ${SANS}`; ctx.fillStyle = DARK;
+        const base = y, ls = wrapText(ctx, v, maxW || W - M * 2 - 190);
+        ls.forEach((t, i) => ctx.fillText(t, M + 190, base + i * 40));
+        y = base + (ls.length - 1) * 40 + 48;
+      };
+
+      newPage(true);
+      ctx.font = `400 28px ${SANS}`; ctx.fillStyle = GREY;
+      ctx.fillText('Order no: ' + orderNo, M, y); ctx.textAlign = 'right';
+      ctx.fillText('Date: ' + new Date().toLocaleDateString('en-GB'), W - M, y); ctx.textAlign = 'left';
+      y += 40; line(M, W - M, y, GOLD, 3); y += 55;
+
+      ctx.font = `700 32px ${SERIF}`; ctx.fillStyle = GOLD; ctx.fillText('CUSTOMER', M, y); y += 50;
+      kv('Name', cust.name); kv('Phone', cust.phone); kv('Address', cust.address);
+      y += 10; line(M, W - M, y, GOLD, 3); y += 55;
+
+      ctx.font = `700 32px ${SERIF}`; ctx.fillStyle = GOLD; ctx.fillText('ITEMS', M, y); y += 30;
+
+      const ROW = 200, IW = 130, IH = 170;
+      for (let i = 0; i < cart.length; i++) {
+        if (y + ROW > H - M - 20) newPage(false);
+        const it = cart[i], p = byId(it.id), tx = M + IW + 30, rightX = W - M;
+        if (imgs[i]) { try { drawCover(ctx, imgs[i], M, y + 10, IW, IH); } catch (e) {} }
+        else { ctx.fillStyle = '#eee'; ctx.fillRect(M, y + 10, IW, IH); }
+        ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.strokeRect(M, y + 10, IW, IH);
+        ctx.fillStyle = DARK; ctx.font = `700 32px ${SANS}`;
+        ctx.fillText(fitText(ctx, p.name, rightX - tx - 190), tx, y + 50);
+        ctx.font = `400 27px ${SANS}`; ctx.fillStyle = GREY;
+        let ly = y + 92;
+        if (it.option) { ctx.fillText('Option: ' + it.option, tx, ly); ly += 38; }
+        if (it.size) { ctx.fillText('Size: ' + it.size, tx, ly); ly += 38; }
+        ctx.fillText(`${it.qty} x ${money(p.price)}`, tx, ly);
+        ctx.textAlign = 'right'; ctx.fillStyle = DARK; ctx.font = `700 34px ${SANS}`;
+        ctx.fillText(money(p.price * it.qty), rightX, y + 50); ctx.textAlign = 'left';
+        y += ROW; line(M, W - M, y - 5);
+      }
+
+      if (y + 430 > H - M) newPage(false);
+      y += 40;
+      const row = (k, v, big) => {
+        ctx.font = `${big ? 700 : 400} ${big ? 40 : 30}px ${big ? SERIF : SANS}`; ctx.fillStyle = big ? GOLD : DARK;
+        ctx.fillText(k, W - M - 480, y); ctx.textAlign = 'right'; ctx.fillText(v, W - M, y); ctx.textAlign = 'left'; y += big ? 70 : 50;
+      };
+      row('Subtotal', money(subtotal)); row('Delivery', money(DELIVERY_FEE));
+      line(W - M - 480, W - M, y - 25, GOLD, 3); y += 15; row('TOTAL', money(total), true);
+      y += 20; line(M, W - M, y, GOLD, 3); y += 50;
+      ctx.font = `600 28px ${SANS}`; ctx.fillStyle = DARK;
+      ctx.fillText('Payment method: Whish', M, y); y += 42;
+      ctx.font = `400 27px ${SANS}`; ctx.fillStyle = GREY;
+      [`Send ${money(total)} on the Whish app to ${WHISH_NUMBER}.`, 'Delivery in 10-15 days. Delivery fees are included in the total.'].forEach(t => { ctx.fillText(t, M, y); y += 38; });
+      ctx.textAlign = 'center'; ctx.fillStyle = GOLD; ctx.font = `italic 30px ${SERIF}`;
+      ctx.fillText('Thank you for shopping at EVANA CHIC', W / 2, H - M); ctx.textAlign = 'left';
+
+      const out = pages.map(c => {
+        const bin = atob(c.toDataURL('image/jpeg', 0.88).split(',')[1]), bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return { w: c.width, h: c.height, bytes };
+      });
+      return makePdf(out);
+    }
+
+    /* ---------- Final step: make the PDF, then share it to WhatsApp ---------- */
+    async function finishOrder(cart, subtotal, total, cust) {
+      const m = openModal(`<h3 class="gold-text">Preparing your receipt…</h3><p>Please wait a moment.</p>`);
+      const orderNo = 'EC-' + Date.now().toString().slice(-6);
+      let blob;
+      try { blob = await buildReceiptPdf(cart, subtotal, total, cust, orderNo); }
+      catch (e) { blob = null; }
+      const textUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(receipt(cart, subtotal, total, cust))}`;
+      if (!blob) {
+        m.remove();
+        openModal(`<h3 class="gold-text">Send Order</h3><p>We could not create the PDF, but you can send your order as a message.</p>
+          <a class="btn solid" style="display:block;margin-top:18px;text-align:center" href="${textUrl}">Send on WhatsApp</a>
+          <button class="back" type="button" id="done-close">Back to cart</button>`).querySelector('#done-close').onclick = () => $('.modal').remove();
+        return;
+      }
+      const fileName = `EVANA-CHIC-${orderNo}.pdf`;
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+      const download = () => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+      };
+      download();                                   // the PDF is created and saved automatically
+      const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(receipt(cart, subtotal, total, cust) + '\n\nOrder no: ' + orderNo + '\n(PDF receipt attached)')}`;
+      const done = openModal(`
+        <h3 class="gold-text">Receipt Ready ✓</h3>
+        <p>Your PDF receipt <b>${orderNo}</b> was saved on your device.</p>
+        <p>Tap the button below to open WhatsApp, then <b>attach the PDF</b> and press send.</p>
+        <button class="btn solid" type="button" id="send-pdf">Send receipt on WhatsApp</button>`);
+      $('#send-pdf', done).onclick = () => { window.open(waUrl, '_blank'); };
     }
 
     function popup(total, onOk) {
@@ -276,15 +480,24 @@
           <div class="pay-note"><b>Note – Payment method: Whish</b><br>Send the total amount on the Whish app to the number <b>${WHISH_NUMBER}</b>.</div>
           <label class="agree"><input type="checkbox" id="agree" ${agreed ? 'checked' : ''}> <span>I understand and I will send the total amount on Whish.</span></label>
           <button class="btn solid" type="button" id="checkout" ${agreed ? '' : 'disabled'}>Checkout</button>
+          <button class="clear-btn" type="button" data-a="clear">Clear cart</button>
         </div>`;
       $('#agree').onchange = e => { agreed = e.target.checked; $('#checkout').disabled = !agreed; };
       $('#checkout').onclick = () => {
         if (!$('#agree').checked) { toast('Please tick the box first'); return; }
-        popup(total, () => { location.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(receipt(cart, subtotal, total))}`; });
+        popup(total, () => detailsForm(cust => finishOrder(cart, subtotal, total, cust)));
       };
     };
     root.addEventListener('click', e => {
       const b = e.target.closest('[data-a]'); if (!b) return;
+      if (b.dataset.a === 'clear') {
+        const m = openModal(`<h3 class="gold-text">Clear cart?</h3><p>All items will be removed from your cart.</p>
+          <button class="btn solid" type="button" id="clear-yes">Yes, clear</button>
+          <button class="back" type="button" id="clear-no">Cancel</button>`);
+        $('#clear-no', m).onclick = () => m.remove();
+        $('#clear-yes', m).onclick = () => { m.remove(); agreed = false; saveCart([]); draw(); toast('Cart cleared'); };
+        return;
+      }
       const c = getCart().filter(i => byId(i.id)), i = +b.dataset.i;
       if (b.dataset.a === 'plus') c[i].qty++;
       if (b.dataset.a === 'minus') c[i].qty = Math.max(1, c[i].qty - 1);
@@ -302,7 +515,6 @@
       ig: '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".6"/>'
     };
     const links = [
-      ['WhatsApp', `https://wa.me/${WHATSAPP_NUMBER}`, ico.wa],
       ['Facebook', FACEBOOK_URL, ico.fb],
       ['Instagram', INSTAGRAM_URL, ico.ig]
     ].filter(l => l[1]);
