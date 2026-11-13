@@ -18,13 +18,23 @@ html { scroll-behavior: smooth; }
 body {
   background-color: var(--black);
   color: var(--text);
+  min-height: 100vh;
+}
+/* Background lives on a fixed layer behind the page.
+   (background-attachment: fixed is ignored by phone browsers, so the picture never showed on mobile.) */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
     linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
     url("images/background.jpg");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
+  transform: translateZ(0);
 }
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; cursor: pointer; }
@@ -296,3 +306,19 @@ footer { text-align: center; padding: 30px; color: var(--muted); font: .65rem 'M
   background: var(--gold-grad); color: #000; display: grid; place-items: center; box-shadow: 0 6px 22px rgba(0,0,0,.5);
 }
 .wa-float svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Clear cart button + delivery details form ---------- */
+.summary .clear-btn {
+  display: block; width: 100%; margin-top: 12px; padding: 12px; background: transparent;
+  border: 1px solid #3b3b3b; color: var(--muted); font: 600 .7rem 'Montserrat', sans-serif;
+  letter-spacing: .22em; text-transform: uppercase; transition: .3s;
+}
+.summary .clear-btn:hover { border-color: #e8715a; color: #e8715a; }
+.modal-box { max-height: 92vh; overflow-y: auto; }
+.field { display: block; text-align: left; margin-bottom: 14px; }
+.field span { display: block; margin-bottom: 6px; font: .65rem 'Montserrat', sans-serif; letter-spacing: .2em; color: var(--muted); text-transform: uppercase; }
+.field input, .field textarea {
+  width: 100%; padding: 12px; background: var(--black); border: 1px solid var(--gold-dark); color: var(--text);
+  font: 16px 'Montserrat', sans-serif; outline: none; resize: vertical; border-radius: 0;
+}
+.field input:focus, .field textarea:focus { border-color: var(--gold); box-shadow: 0 0 12px rgba(212,175,55,.3); }
